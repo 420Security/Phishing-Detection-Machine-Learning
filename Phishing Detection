@@ -1,0 +1,219 @@
+import numpy as np
+from features_extraction import generate_data_set
+from sklearn.ensemble import RandomForestClassifier as rfc
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression as lr
+from flask import jsonify
+from sklearn.metrics import confusion_matrix , roc_curve, accuracy_score, classification_report, plot_confusion_matrix
+import matplotlib.pyplot as plt
+import csv
+from sklearn import tree
+from sklearn.naive_bayes import GaussianNB
+from sklearn.neighbors import KNeighborsClassifier
+import scikitplot as skplt
+import time
+
+
+def feedback(data_set):
+    try:
+        with open('demo_dataset.csv','a', newline='') as fd:
+            dataWriter = csv.writer(fd, delimiter = ',')
+            dataWriter.write
+            row(data_set)
+            fd.close()
+            
+    
+    except IOError as ioerr:
+        print('Please ensure the file is closed.')
+        print(ioerr)
+
+
+def urlfeed():
+    
+    url = input('Enter the URL: ')
+    data_set=generate_data_set(url)
+
+    status = input('\n1.Phishing \n2.Benign \n\nEnter the no to classify the URL: ')
+    if status == '1':
+        print('\nURL is tagged as Phishing & added into training dataset.')
+        data_set.append(-1)
+        feedback(data_set)
+    elif status == '2':
+        print('\nURL is tagged as Benign & added into training dataset.')
+        data_set.append(1)
+        feedback(data_set)
+    else:
+        print('\nInvalid seletction')
+    
+    
+def evaluation(classifier):
+    data = np.loadtxt("demo_dataset.csv", delimiter = ",")
+
+    #Seperating features and labels
+    X = data[: , :-1]
+    y = data[: , -1]
+    #Seperating training features, testing features, training labels & testing labels
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size = 0.2)
+    clf = classifier
+
+    clf.fit(X_train, y_train)
+    # Predicting the test set results
+    y_test_pred = clf.predict(X_test)
+    clf.score(X_test, y_test)
+    CM = confusion_matrix(y_test, y_test_pred)
+    print ('Confusion Matrix :')
+    print(CM)
+    TP = CM[0][0]
+    FP = CM[0][1]
+    FN = CM[1][0]
+    TN = CM[1][1]
+    print("True Positives: ",TP)
+    print("False Positives: ",FP)
+    print("False Negatives: ",FN)
+    print("True Negatives: ",TN)
+    Accuracy = (TN+TP)*100/(TP+TN+FP+FN) 
+    print("Accuracy {:0.2f}%:",format(Accuracy))
+    Precision = TP/(TP+FP) 
+    misclass = 100 - Accuracy
+    print("Misclass {:0.2f}%:",format(misclass))
+    print("Precision {:0.2f}",format(Precision))
+    print ('Classification Report : ')
+    print (classification_report(y_test, y_test_pred))
+        
+    # Plot non-normalized confusion matrix
+    titles_options = [("Confusion matrix, without normalization", None),
+                      ("Normalized confusion matrix", 'true')]
+    class_names = ['Phishing', 'Benign']
+    for title, normalize in titles_options:
+        disp = plot_confusion_matrix(classifier, X_test, y_test,
+                                     display_labels=class_names,
+                                     cmap=plt.cm.Blues,
+                                     normalize=normalize)
+        disp.ax_.set_title(title)
+        print(title)
+        print(disp.confusion_matrix)
+        
+    plt.xlabel('Predicted label\nAccuracy={:0.4f}; misclass={:0.4f}'.format(Accuracy, misclass))
+    plt.show()
+
+    
+    
+def getResult(url):
+    start_time = time.time()
+    #Importing dataset
+    data = np.loadtxt("demo_dataset.csv", delimiter = ",")
+
+    #Seperating features and labels
+    X = data[: , :-1]
+    y = data[: , -1]
+    clf = rfc(n_estimators=100)
+    #clf = lr()
+    #clf = GaussianNB()
+    #clf = KNeighborsClassifier(n_neighbors = 5, metric = 'minkowski', p = 2)
+    
+
+    clf.fit(X, y)
+
+    X_new = []
+
+    X_input = url
+    data_set=generate_data_set(X_input)
+    X_new = np.array(data_set).reshape(1,-1)
+    
+    
+    prediction = clf.predict(X_new)
+    end_time = time.time()
+    prediction_score = clf.predict_proba(X_new)
+    confidence_score1 = prediction_score[0][0] * 100
+    confidence_score2 = prediction_score[0][1] * 100
+    if confidence_score1 < confidence_score2:
+        confidence_score = confidence_score2
+    else:
+        confidence_score = confidence_score1
+    print ('\nConfidence Score : ',confidence_score)
+    if confidence_score < 70:
+        print('\nModel confidence is below 70.')
+        if prediction == -1:
+            print('Model tagged as Phishing')
+        else:
+            print('Model tagged as Benign')
+        number = input('Please classify this ' + "URL/Domain '" + url + "'" + ' by providing user input\n \
+                         \n1.Phishing \n2.Benign \nEnter the input no: ')
+        if number == '1':
+            print('\nURL is tagged as Phishing & added into training dataset.')
+            data_set.append(-1)
+            feedback(data_set)
+        else:
+            print('\nURL is tagged as Benign & added into training dataset.')
+            data_set.append(1)
+            feedback(data_set)
+    else:
+        if prediction == -1:
+            print("\nURL Prediction: Phishing Url")
+        else:
+            print("\nURL Prediction: Benign Url")
+    
+    print('Time taken to give the prediction:', end_time-start_time ,' sec')
+
+def switchMenu(choice):
+    if choice == '1':
+        url = input('Enter the URL for prediction: ')
+        getResult(url)
+
+    if choice == '2':
+        urlfeed()
+
+    if choice == '3':
+        print('\nPlease select the model from below list.')
+        print('1. Random Forest')
+        print('2. Logistic Regression')
+        print('3. Naive Bayes')
+        print('4. K-Nearest Neighbours')
+      
+        print('\n')
+        model = input('Enter the Model No: ')
+        print('\n')
+        if model == '1':
+            classifier = classifier = rfc(n_estimators=100)
+        elif model == '2':
+            classifier = lr()
+        elif model == '3':
+            classifier = GaussianNB()
+        elif model == '4':
+            classifier = KNeighborsClassifier(n_neighbors = 5, metric = 'minkowski', p = 2)
+        elif model == '5':
+            classifier = KNeighborsClassifier(n_neighbors = 5, metric = 'minkowski', p = 2)
+        
+        else:
+            print('Invalid Selection')
+
+        evaluation(classifier)
+        
+    if choice == '0':
+        exit()
+    else:
+        mainMenu()
+
+def mainMenu():
+    print("\n\n\n---------------------------------------------------")
+    print("   Phishing URL Detection Using Machine Learning     ")
+    print("---------------------------------------------------")
+    print("\n")
+    print(" What would you like to do? ")
+    print(" OPTION 1: Phishing URL Detection")
+    print(" OPTION 2: URL Feed")
+    print(" OPTION 3: Model Evaluation")
+    print(" OPTION 0: Exit Tool\n")
+    switchMenu(input('\nPlease Enter the No :  '))
+
+
+if __name__ == '__main__':
+    mainMenu()
+
+
+
+
+"""# save the model to disk
+filename = 'finalized_model.sav'
+pickle.dump(clf, open(filename, 'wb'))
+"""  
