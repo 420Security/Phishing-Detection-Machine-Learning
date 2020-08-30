@@ -1,0 +1,641 @@
+
+import ipaddress
+import re
+import urllib.request
+from bs4 import BeautifulSoup
+import requests
+from googlesearch import search
+import whois
+from datetime import datetime
+import time
+import csv
+import whois.parser
+import socket
+
+
+def generate_data_set(url):
+    #url = 'pof.com'
+    data_set = []
+
+    # Converts the given URL into standard format
+    if not re.match(r"^https?", url):
+        url = "http://" + url
+    
+    response = ''
+    # Stores the response of the given URL
+    try:
+        response = requests.get(url, timeout = 10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+    except socket.timeout:
+        soup = -999
+
+    except Exception:
+        soup = -999
+
+    except:
+        response = ""
+        soup = -999
+    
+     
+    # Extracts domain from the given URL
+    domain = re.findall(r"://([^/]+)/?", url)[0]
+    if re.match(r"^www.",domain):
+	       domain = domain.replace("www.","")
+
+    # Requests all the information about the domain
+    whois_response = ""
+    try:
+        whois_response = whois.whois(domain)
+    
+    except socket.timeout:
+        whois_response = ""
+
+    except ConnectionRefusedError:
+        whois_response = "Reset"
+            
+    except ConnectionResetError:
+        whois_response = "Reset"
+        
+    except whois.parser.PywhoisError:
+        pass
+    
+    except:
+        whois_response = ""
+
+        #print('No match found in Whois')
+        
+    # 0.Domain_name
+    data_set.append(url)
+
+    # 1.having_IP_Address
+    try:
+        ipaddress.ip_address(domain)
+        data_set.append(-1)
+        #print('1.having_IP_Address= -1')
+    except:
+        data_set.append(1)
+        #print('1.having_IP_Address= 1')
+
+    # 2.URL_Length
+    if len(url) < 54:
+        data_set.append(1)
+        #print('2 URL_Length')
+    elif len(url) >= 54 and len(url) <= 75:
+        data_set.append(0)
+        #print('2 URL_Length')
+    else:
+        data_set.append(-1)
+        #print('2 URL_Length')
+
+    # 3.Shortining_Service
+    match=re.search('bit\.ly|goo\.gl|shorte\.st|go2l\.ink|tinyurl|tr\.im|is\.gd|cli\.gs|'
+                    'yfrog\.com|migre\.me|ff\.im|tiny\.cc|url4\.eu|twit\.ac|su\.pr|twurl\.nl|snipurl\.com|'
+                    'short\.to|BudURL\.com|ping\.fm|post\.ly|Just\.as|bkite\.com|snipr\.com|fic\.kr|loopt\.us|'
+                    'doiop\.com|short\.ie|kl\.am|wp\.me|rubyurl\.com|om\.ly|to\.ly|bit\.do|//t\.co|lnkd\.in|'
+                    'db\.tt|qr\.ae|adf\.ly|goo\.gl|bitly\.com|cur\.lv|tinyurl\.com|ow\.ly|bit\.ly|ity\.im|'
+                    'q\.gs|is\.gd|po\.st|bc\.vc|twitthis\.com|u\.to|j\.mp|buzurl\.com|cutt\.us|u\.bb|yourls\.org|'
+                    '//x\.co|prettylinkpro\.com|scrnch\.me|filoops\.info|vzturl\.com|qr\.net|1url\.com|tweez\.me|v\.gd|tr\.im|link\.zip\.net',url)
+    if match:
+        data_set.append(-1)
+        #print('Shortining_Service')
+    else:
+        data_set.append(1)
+        #print('Shortining_Service')
+
+    # 4.having_At_Symbol
+    if re.findall("@", url):
+        data_set.append(-1)
+        #print('having_At_Symbol')
+    else:
+        data_set.append(1)
+        #print('having_At_Symbol')
+
+    # 5.double_slash_redirecting
+    list=[x.start(0) for x in re.finditer('//', url)]
+    if list[len(list)-1]>6:
+        data_set.append(-1)
+        #print('double_slash_redirecting')
+    else:
+        data_set.append(1)
+        #print('double_slash_redirecting')
+
+    # 6.Prefix_Suffix
+    if re.findall(r"https?://[^\-]+-[^\-]+/", url):
+        data_set.append(-1)
+        #print('Prefix_Suffix')
+    else:
+        data_set.append(1)
+        #print('Prefix_Suffix')
+
+    # 7.having_Sub_Domain
+    if len(re.findall("\.", url)) == 1:
+        data_set.append(1)
+        #print('having_Sub_Domain')
+    elif len(re.findall("\.", url)) == 2:
+        data_set.append(0)
+        #print('having_Sub_Domain')
+    else:
+        data_set.append(-1)
+        #print('having_Sub_Domain')
+
+    # 8.SSLfinal_State
+    try:
+        if response.text:
+            data_set.append(1)
+            #print('SSLfinal_State')
+        else:
+            data_set.append(-1)
+            #print('SSLfinal_State')
+    except:
+        data_set.append(-1)
+        #print('SSLfinal_State')
+
+    # 9.Domain_registeration_length
+    registeration_length = 0
+    if whois_response == "":
+        data_set.append(-1)
+        #print('age_of_domain')
+    else:
+        if whois_response == "Reset":
+            data_set.append(0)
+        else:    
+            try:
+                try:
+                    d = (whois_response['expiration_date'])
+                    exp = d.date()
+                except:
+                    d = (whois_response['expiration_date'][0])
+                    exp = d.date()
+                try:
+                    cre = (whois_response['creation_date'])
+                    cre = cre.date()
+                except:
+                    cre = (whois_response['creation_date'][0])
+                    cre = cre.date()
+                registeration_length = (exp - cre).days
+                
+                if registeration_length / 365 <= 1:
+                    data_set.append(-1)
+                    #print('Domain_registeration_length')
+                else:
+                    data_set.append(1)
+                    #print('Domain_registeration_length')            
+
+            except KeyError:
+                data_set.append(0)
+            
+            except AttributeError:
+                data_set.append(0)
+    
+            except TypeError:
+                data_set.append(0)    
+      
+    
+    # 10.Favicon
+    if soup == -999:
+        data_set.append(-1)
+        #print('Favicon')
+    else:
+        try:
+            for head in soup.find_all('head'):
+                for head.link in soup.find_all('link', href=True):
+                    dots = [x.start(0) for x in re.finditer('\.', head.link['href'])]
+                    if url in head.link['href'] or len(dots) == 1 or domain in head.link['href']:
+                        data_set.append(1)
+                        #print('Favicon 0')
+                        raise StopIteration
+                    else:
+                        data_set.append(-1)
+                        #print('Favicon 1')
+                        raise StopIteration
+            if soup.find_all('head') == []:
+                data_set.append(1)
+                #print('Favicon 3')
+            elif soup.find_all('link', href=True) == []:
+                data_set.append(1)
+                #print('Favicon 4')
+        except StopIteration:
+            pass
+        
+    #11. port
+    try:
+        port = domain.split(":")[1]
+        if port:
+            data_set.append(-1)
+            #print('port')
+        else:
+            data_set.append(1)
+            #print('port')
+    except:
+        data_set.append(1)
+        #print('port')
+
+    #12. HTTPS_token
+    if response == "":
+        if re.findall(r"^https://", url):
+            data_set.append(1)
+            #print('HTTPS_token')
+        else:
+            data_set.append(-1)
+            #print('HTTPS_token')
+    else:
+        if re.findall(r"^https://", response.url):
+            data_set.append(1)
+            #print('HTTPS_token')
+        else:
+            data_set.append(-1)
+            #print('HTTPS_token')
+
+    #13. Request_URL
+    i = 0
+    success = 0
+    if soup == -999:
+        data_set.append(-1)
+        #print('Request_URL')
+    else:
+        for img in soup.find_all('img', src= True):
+           dots= [x.start(0) for x in re.finditer('\.', img['src'])]
+           if url in img['src'] or domain in img['src'] or len(dots)==1:
+              success = success + 1
+           i=i+1
+
+        for audio in soup.find_all('audio', src= True):
+           dots = [x.start(0) for x in re.finditer('\.', audio['src'])]
+           if url in audio['src'] or domain in audio['src'] or len(dots)==1:
+              success = success + 1
+           i=i+1
+
+        for embed in soup.find_all('embed', src= True):
+           dots=[x.start(0) for x in re.finditer('\.',embed['src'])]
+           if url in embed['src'] or domain in embed['src'] or len(dots)==1:
+              success = success + 1
+           i=i+1
+
+        for iframe in soup.find_all('iframe', src= True):
+           dots=[x.start(0) for x in re.finditer('\.',iframe['src'])]
+           if url in iframe['src'] or domain in iframe['src'] or len(dots)==1:
+              success = success + 1
+           i=i+1
+
+        try:
+           percentage = success/float(i) * 100
+           if percentage < 22.0 :
+              data_set.append(1)
+              #print('Request_URL')
+           elif((percentage >= 22.0) and (percentage < 61.0)) :
+              data_set.append(0)
+              #print('Request_URL')
+           else :
+              data_set.append(-1)
+              #print('Request_URL')
+        except:
+            data_set.append(1)
+            #print('Request_URL')
+
+
+
+    #14. URL_of_Anchor
+    percentage = 0
+    i = 0
+    unsafe=0
+    if soup == -999:
+        data_set.append(-1)
+        #print('URL_of_Anchor')
+    else:
+        for a in soup.find_all('a', href=True):
+        # 2nd condition was 'JavaScript ::void(0)' but we put JavaScript because the space between javascript and :: might not be
+                # there in the actual a['href']
+            if "#" in a['href'] or "javascript" in a['href'].lower() or "mailto" in a['href'].lower() or not (url in a['href'] or domain in a['href']):
+                unsafe = unsafe + 1
+            i = i + 1
+
+        try:
+            percentage = unsafe / float(i) * 100
+            if percentage < 31.0:
+                data_set.append(1)
+                #print('URL_of_Anchor')
+            elif ((percentage >= 31.0) and (percentage < 67.0)):
+                data_set.append(0)
+                #print('URL_of_Anchor')
+            else:
+                data_set.append(-1)
+                #print('URL_of_Anchor')
+        except:
+            data_set.append(1)
+            #print('URL_of_Anchor')
+
+    #15. Links_in_tags
+    i=0
+    success =0
+    if soup == -999:
+        data_set.append(-1)
+        #print('Links_in_tags')
+    else:
+        for link in soup.find_all('link', href= True):
+           dots=[x.start(0) for x in re.finditer('\.',link['href'])]
+           if url in link['href'] or domain in link['href'] or len(dots)==1:
+              success = success + 1
+           i=i+1
+
+        for script in soup.find_all('script', src= True):
+           dots=[x.start(0) for x in re.finditer('\.',script['src'])]
+           if url in script['src'] or domain in script['src'] or len(dots)==1 :
+              success = success + 1
+           i=i+1
+        try:
+            percentage = success / float(i) * 100
+            if percentage < 17.0 :
+               data_set.append(1)
+               #print('Links_in_tags')
+            elif((percentage >= 17.0) and (percentage < 81.0)) :
+               data_set.append(0)
+               #print('Links_in_tags')
+            else :
+               data_set.append(-1)
+               #print('Links_in_tags')
+        except:
+            data_set.append(1)
+            #print('Links_in_tags') 
+
+
+    #16. SFH
+    if soup == -999:
+        data_set.append(-1)
+        #print('SFH -1')
+    elif soup.find_all('form', action= True) == []:
+        data_set.append(1)
+        #print('SFH0')
+    else:
+        for form in soup.find_all('form', action= True):
+           if form['action'] =="" or form['action'] == "about:blank" :
+              data_set.append(-1)
+              #print('SFH1')
+              break
+           elif url not in form['action'] and domain not in form['action']:
+               data_set.append(0)
+               #print('SFH2')
+               break
+           else:
+                 data_set.append(1)
+                 #print('SFH3')
+                 break
+
+        
+    #17. Submitting_to_email
+    if response == "":
+        data_set.append(-1)
+        #print('Submitting_to_email')
+    else:
+        if re.findall(r"[mail\(\)|mailto:?]", response.text):
+            data_set.append(-1)
+            #print('Submitting_to_email')
+        else:
+            data_set.append(1)
+            #print('Submitting_to_email')
+
+    #18. Abnormal_URL
+    if response == "":
+        data_set.append(-1)
+        #print('Abnormal_URL')
+    else:
+        if response.text == "":
+            data_set.append(-1)
+            #print('Abnormal_URL')
+        else:
+            data_set.append(1)
+            #print('Abnormal_URL')
+
+    #19. Redirect
+    if response == "":
+        data_set.append(-1)
+        #print('Redirect')
+    else:
+        if len(response.history) <= 1:
+            data_set.append(1)
+            #print('Redirect')
+        elif len(response.history) <= 4:
+            data_set.append(0)
+            #print('Redirect')
+        else:
+            data_set.append(-1)
+            #print('Redirect')
+
+    #20. on_mouseover
+    if response == "" :
+        data_set.append(-1)
+        #print('on_mouseover')
+    else:
+        if re.findall("<script>.+onmouseover.+</script>", response.text):
+            data_set.append(-1)
+            #print('on_mouseover')
+        else:
+            data_set.append(1)
+            #print('on_mouseover')
+
+    #21. RightClick
+    if response == "":
+        data_set.append(-1)
+        #print('RightClick')
+    else:
+        if re.findall(r"event.button ?== ?2", response.text):
+            data_set.append(-1)
+            #print('RightClick')
+        else:
+            data_set.append(1)
+            #print('RightClick')
+
+    #22. popUpWidnow
+    if response == "":
+        data_set.append(-1)
+        #print('popUpWidnow')
+    else:
+        if re.findall(r"alert\(", response.text):
+            data_set.append(-1)
+            #print('popUpWidnow')
+        else:
+            data_set.append(1)
+            #print('popUpWidnow')
+
+    #23. Iframe
+    if response == "":
+        data_set.append(-1)
+        #print('Iframe')
+    else:
+        if re.findall(r"[<iframe>|<frameBorder>]", response.text):
+            data_set.append(-1)
+            #print('Iframe')
+        else:
+            data_set.append(1)
+            #print('Iframe')
+
+    #24. age_of_domain
+    domain_age = 0
+    if whois_response == "":
+        data_set.append(-1)
+        #print('Domain_registeration_length')
+    else:
+        if whois_response == "Reset":
+            data_set.append(0)
+        else:    
+            try:
+                try:
+                    d = (whois_response['creation_date'])
+                    cre = d.date()
+                except:
+                    d = (whois_response['creation_date'][0])
+                    cre = d.date()
+                today = datetime.now().date()
+                domain_age = (today - cre).days
+
+                if domain_age > 180:
+                    data_set.append(1)
+                else:
+                    data_set.append(-1)                
+
+            except KeyError:
+                data_set.append(0)
+            
+            except AttributeError:
+                data_set.append(0)
+    
+            except TypeError:
+                data_set.append(0)
+
+            
+    #25. DNSRecord
+    dns = 1
+    try:
+        d = whois.whois(domain)
+    except:
+        dns=-1
+    if dns == -1:
+        data_set.append(-1)
+        #print('DNSRecord')
+    else:
+        if registeration_length / 365 <= 1:
+            data_set.append(-1)
+            #print('DNSRecord')
+        else:
+            data_set.append(1)
+            #print('DNSRecord')
+
+    #26. web_traffic
+    try:
+        rank = BeautifulSoup(urllib.request.urlopen("https://www.alexa.com/minisiteinfo/" +url),'html.parser').table.a.get_text()
+        rank_int=int(rank.replace(',',''))
+        if (rank_int<100000):
+            data_set.append(1)
+            #print('web_traffic')
+        else:
+            data_set.append(0)
+            #print('web_traffic')
+    except TypeError:
+        data_set.append(-1)
+        #print('web_traffic')
+        
+    except UnicodeEncodeError:
+        data_set.append(-1)
+        #print('web_traffic')
+        
+    except:
+        data_set.append(-1)
+        
+
+    #27. Google_Index
+    site=search(url, 5)
+    if site:
+        data_set.append(1)
+        #print('Google_Index')
+    else:
+        data_set.append(-1)
+        #print('Google_Index')
+
+    #28. Links_pointing_to_page
+    if response == "":
+        data_set.append(-1)
+        #print('Links_pointing_to_page')
+    else:
+        number_of_links = len(re.findall(r"<a href=", response.text))
+        if number_of_links == 0:
+            data_set.append(-1)
+            #print('Links_pointing_to_page')
+        elif number_of_links <= 2:
+            data_set.append(0)
+            #print('Links_pointing_to_page')
+        else:
+            data_set.append(1)
+            #print('Links_pointing_to_page')
+
+    #29. Statistical_report
+    url_match=re.search('at\.ua|usa\.cc|baltazarpresentes\.com\.br|pe\.hu|esy\.es|hol\.es|sweddy\.com|myjino\.ru|96\.lt|ow\.ly',url)
+    try:
+        ip_address=socket.gethostbyname(domain)
+        ip_match=re.search('146\.112\.61\.108|213\.174\.157\.151|121\.50\.168\.88|192\.185\.217\.116|78\.46\.211\.158|181\.174\.165\.13|46\.242\.145\.103|121\.50\.168\.40|83\.125\.22\.219|46\.242\.145\.98|'
+                           '107\.151\.148\.44|107\.151\.148\.107|64\.70\.19\.203|199\.184\.144\.27|107\.151\.148\.108|107\.151\.148\.109|119\.28\.52\.61|54\.83\.43\.69|52\.69\.166\.231|216\.58\.192\.225|'
+                           '118\.184\.25\.86|67\.208\.74\.71|23\.253\.126\.58|104\.239\.157\.210|175\.126\.123\.219|141\.8\.224\.221|10\.10\.10\.10|43\.229\.108\.32|103\.232\.215\.140|69\.172\.201\.153|'
+                           '216\.218\.185\.162|54\.225\.104\.146|103\.243\.24\.98|199\.59\.243\.120|31\.170\.160\.61|213\.19\.128\.77|62\.113\.226\.131|208\.100\.26\.234|195\.16\.127\.102|195\.16\.127\.157|'
+                           '34\.196\.13\.28|103\.224\.212\.222|172\.217\.4\.225|54\.72\.9\.51|192\.64\.147\.141|198\.200\.56\.183|23\.253\.164\.103|52\.48\.191\.26|52\.214\.197\.72|87\.98\.255\.18|209\.99\.17\.27|'
+                           '216\.38\.62\.18|104\.130\.124\.96|47\.89\.58\.141|78\.46\.211\.158|54\.86\.225\.156|54\.82\.156\.19|37\.157\.192\.102|204\.11\.56\.48|110\.34\.231\.42',ip_address)
+        if url_match:
+            data_set.append(-1)
+            #print('Statistical_report')
+        elif ip_match:
+            data_set.append(-1)
+            #print('Statistical_report')
+        else:
+            data_set.append(1)
+            #print('Statistical_report')
+    except:
+        data_set.append(-1)
+        #print('Statistical_report')
+
+    #30. Unicode_domain
+    if 'xn--' in str(domain).lower():
+        data_set.append(-1)
+        #print('Unicode_domain1')
+    else:
+        data_set.append(1)   
+        #print('Unicode_domain2')
+
+    print (data_set)
+    print('\n')
+    return data_set
+
+try:
+    rfile = open(r'C:\Users\riddh\Desktop\Demo\Latest\16k-24k_op.csv', 'w+', newline='')
+    dataWriter = csv.writer(rfile, delimiter = ',')
+    header = ['domain', 'having_IP_Address', 'URL_Length', 'Shortining_Service' , 'having_At_Symbol' ,'double_slash_redirecting', 'Prefix_Suffix', 'having_Sub_Domain', 'SSLfinal_State', 'Domain_registeration_length', 'Favicon' ,'port', 'HTTPS_token', 'Request_URL', 'URL_of_Anchor', 'Links_in_tags', 'SFH', 'Submitting_to_email', 'Abnormal_URL', 'Redirect', 'on_mouseover', 'RightClick', 'popUpWidnow', 'Iframe', 'age_of_domain', 'DNSRecord', 'web_traffic', 'Google_Index', 'Links_pointing_to_page', 'Statistical_report' , 'Unicode_domain']
+    dataWriter.writerow(header)
+
+except IOError as ioerr:
+    print('Please ensure the file is closed.')
+    print(ioerr)
+
+
+##### CHANGE TO TEXT FILE PATH. ONE DOMAIN PER LINE! #####
+try:
+    # read domains from file and pass them to DomainScanner and DomainReportReader
+    with open(r'C:\Users\riddh\Desktop\Demo\Latest\16k-24k.csv', 'r') as infile:  # keeping the file open because it shouldnt
+                                              # be opened/modified during reading anyway
+        
+        for domain in infile:
+            domain = domain.strip('\n')
+            print('URL ' + domain + ' is scanning. Please wait for a while.')
+            try:
+                data = generate_data_set(domain)
+                if data:
+                    dataWriter.writerow(data)
+                    
+            except Exception as err:  # keeping it
+                data_set = []
+                print('Encountered an error but scanning will continue.', err)
+                data_set.append(domain)
+                data_set.append(err)                
+                dataWriter.writerow(data_set)
+                
+except FileNotFoundError:
+    print('\n"test_url.csv" file not Found. Please copy the file.')
+    
+rfile.close()  
+
