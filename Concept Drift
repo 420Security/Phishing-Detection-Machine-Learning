@@ -1,0 +1,48 @@
+
+from features_extraction import generate_data_set
+import requests
+import pandas as pd
+import datetime
+import os 
+import csv
+
+Current_Date = datetime.datetime.today().strftime ('%Y-%m-%d')
+filename = datetime.datetime.today().strftime ('Phishing_Feeds_%Y-%m-%d')
+
+#1. Openphish
+
+response2 = requests.get('https://openphish.com/feed.txt')
+link2 = open(r'C:\Users\riddh\Desktop\Final\openphish1.txt', 'wb').write(response2.content)
+file21 = r'C:\Users\riddh\Desktop\Final\openphish1.txt'
+header_list = ["url"]
+read_file2 = pd.read_csv(file21, names=header_list, error_bad_lines=False)
+read_file2.insert(1, 'Malicious Status', -1)
+read_file2.to_csv (r'C:\Users\riddh\Desktop\Final'+'\\' + filename + '.csv', index=None)
+
+os.remove(r'C:\Users\riddh\Desktop\Final\openphish1.txt')
+
+def feedback(data_set):
+    try:
+        with open(r'C:\Users\riddh\Desktop\Final\demo_dataset.csv','a', newline='') as fd:
+            dataWriter = csv.writer(fd, delimiter = ',')
+            dataWriter.writerow(data_set)
+            fd.close()
+            
+    
+    except IOError as ioerr:
+        print('Please ensure the file is closed.')
+        print(ioerr)
+
+
+for url in read_file2['url']:
+    print('URL ' + url + ' is scanning. Please wait for a while.')
+    data_set=generate_data_set(url)
+    print('\n')
+    data_set.append(-1)
+    feedback(data_set)
+
+
+        
+        
+        
+        
